@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Research interface for query-guided video frame retrieval using SigLIP2 text–image similarity.">
+  <title>Query-Guided Video Frame Retrieval</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="static/styles.css?v=3">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="project-context">
+        <span class="project-title">VIDEO RETRIEVAL</span>
+        <span class="project-divider">/</span>
+        <span class="project-kind">Research prototype</span>
+      </div>
+      <div class="runtime-pill"><span class="status-dot"></span><span id="runtimeText">Connecting…</span></div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="eyebrow">METHOD OVERVIEW</div>
+        <h1>Query-guided video<br><span>frame retrieval</span></h1>
+        <p>SigLIP2 ranks frames sampled at one frame per second by text–image similarity. Review the timeline and candidate frames before selecting a smaller set for downstream vision-language analysis.</p>
+      </section>
+
+      <section class="panel search-panel">
+        <div class="section-heading">
+          <div>
+            <div class="eyebrow">INPUT</div>
+            <h2>Video and query</h2>
+          </div>
+          <span class="model-tag" id="modelTag">SigLIP2</span>
+        </div>
+
+        <label class="field-label" for="videoSelect">Video</label>
+        <select id="videoSelect" class="control"><option>Loading videos…</option></select>
+        <div class="video-meta" id="videoMeta">Searching configured video folders…</div>
+
+        <label class="field-label query-label" for="queryInput">Text query</label>
+        <div class="query-row">
+          <input id="queryInput" class="control query-input" type="text" maxlength="1000"
+                 placeholder="e.g. a person takes a bag and runs toward the exit">
+          <label class="budget-control" title="Number of highest-ranked frames to select and export">
+            <span>Frames to select</span>
+            <input id="selectedBudget" type="number" min="1" max="200" value="10">
+          </label>
+          <button id="searchButton" class="primary-button" type="button">Search frames <span aria-hidden="true">→</span></button>
+        </div>
+        <div class="helper-row">
+          <span>Optional query expansion uses Gemini; frame matching runs locally with SigLIP2.</span>
+          <span id="geminiStatus" class="api-status">Checking Gemini…</span>
+        </div>
+
+        <div id="progressBox" class="progress-box hidden" role="status" aria-live="polite">
+          <div class="progress-heading">
+            <div class="progress-top"><span id="progressPhase">Preparing search…</span><span id="progressPercent">0%</span></div>
+            <button id="cancelButton" class="cancel-button hidden" type="button">Cancel search</button>
+          </div>
+          <div id="progressJobMeta" class="progress-job-meta"></div>
+          <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
+          <div id="progressLabel" class="progress-label">Starting</div>
+        </div>
+        <div id="errorBox" class="error-box hidden" role="alert"></div>
+      </section>
+
+      <section id="resultsSection" class="hidden">
+        <div class="results-head">
+          <div>
+            <div class="eyebrow">RETRIEVAL OUTPUT</div>
+            <h2 id="resultsTitle">Results</h2>
+            <div id="searchPhrases" class="phrase-list"></div>
+            <div id="searchNote" class="notice hidden"></div>
+          </div>
+          <div class="result-count" id="resultCount"></div>
+        </div>
+
+        <section class="panel chart-panel">
+          <div class="chart-heading">
+            <div>
+              <h3>Frame–query similarity</h3>
+              <p>Each point represents one sampled second. Higher cosine similarity indicates a closer text–frame match.</p>
+            </div>
+            <div id="bestFrameBadge" class="best-frame-badge"></div>
+          </div>
+          <div class="chart-wrap"><canvas id="scoreChart" aria-label="Similarity score by video second"></canvas></div>
+          <div id="chartTooltip" class="chart-tooltip"></div>
+        </section>
+
+        <section class="panel gallery-panel">
+          <div class="gallery-head">
+            <div>
+              <h3>Frame samples</h3>
+              <p>Selected frames are highlighted; each card shows its timestamp, retrieval rank, and similarity score.</p>
+            </div>
+            <div class="gallery-actions">
+              <span id="selectedFrameCount" class="selection-summary" aria-live="polite">— selected</span>
+              <div class="gallery-tools">
+                <label for="sortSelect">Order</label>
+                <select id="sortSelect" class="small-control">
+                <option value="time">Video time</option>
+                  <option value="score" selected>Highest score</option>
+                </select>
+              </div>
+              <button id="downloadSelected" class="secondary-button export-button" type="button">Export selected frames</button>
+            </div>
+          </div>
+          <div id="exportStatus" class="export-status hidden" role="status"></div>
+          <div id="frameGrid" class="frame-grid"></div>
+          <div class="pagination">
+            <button id="prevPage" class="secondary-button" type="button">← Previous</button>
+            <span id="pageInfo">Page 1</span>
+            <button id="nextPage" class="secondary-button" type="button">Next →</button>
+          </div>
+        </section>
+
+        <section class="panel cost-panel">
+          <div class="section-heading cost-heading">
+            <div>
+              <div class="eyebrow">COST SCENARIO</div>
+              <h2>Illustrative VLM request cost</h2>
+              <p class="section-description">Compare the estimated cost of sending all sampled frames with sending only the selected frames under the assumptions below.</p>
+            </div>
+            <span class="estimate-tag">ESTIMATE</span>
+          </div>
+
+          <div class="cost-controls">
+            <label title="This is a display label; set the actual rates in the two fields below.">Pricing reference<input id="vlmName" class="small-control" value="Gemini 2.5 Flash"></label>
+            <label>Image tokens / frame<input id="imageTokens" class="small-control" type="number" min="1" value="258"></label>
+            <label>Frames per request<input id="framesPerRequest" class="small-control" type="number" min="1" value="20"></label>
+            <label>Input $ / 1M tokens<input id="inputRate" class="small-control" type="number" min="0" step="0.01" value="0.30"></label>
+            <label>Output $ / 1M tokens<input id="outputRate" class="small-control" type="number" min="0" step="0.01" value="2.50"></label>
+          </div>
+          <details class="advanced-cost">
+            <summary>Adjust prompt and answer assumptions</summary>
+            <div class="cost-controls secondary-cost-controls">
+              <label>Prompt tokens / request<input id="promptTokens" class="small-control" type="number" min="0" value="160"></label>
+              <label>Answer tokens / request<input id="answerTokens" class="small-control" type="number" min="0" value="250"></label>
+            </div>
+          </details>
+
+          <div class="cost-comparison">
+            <div class="cost-card">
+              <span class="cost-label">Send all sampled frames</span>
+              <strong id="fullCost">—</strong>
+              <span id="fullCostMeta" class="cost-meta">—</span>
+            </div>
+            <div class="cost-arrow" aria-hidden="true">→</div>
+            <div class="cost-card selected-cost-card">
+              <span class="cost-label">Send selected frames</span>
+              <strong id="selectedCost">—</strong>
+              <span id="selectedCostMeta" class="cost-meta">—</span>
+            </div>
+            <div class="saving-card">
+              <span class="cost-label">Estimated reduction</span>
+              <strong id="savingPercent">—</strong>
+              <span id="savingAmount" class="cost-meta">—</span>
+            </div>
+          </div>
+          <p class="cost-footnote">Estimate includes image and prompt input tokens plus the assumed answer output tokens for each request. It assumes one image per second resized to at most 384 px (258 image tokens), batches according to “frames per request,” and uses the editable rates above. It excludes query expansion and local SigLIP2 compute; actual billing can differ with tokenization and API limits. Check <a href="https://ai.google.dev/gemini-api/docs/pricing" target="_blank" rel="noreferrer">current Gemini API pricing</a>.</p>
+        </section>
+      </section>
+
+      <footer class="footer">Similarity ranks visual matches for review. It does not establish what an event means or whether a crime occurred.</footer>
+    </main>
+  </div>
+  <script src="static/app.js?v=10"></script>
+</body>
+</html>
